@@ -1,126 +1,48 @@
-import logging
-import asyncio
 from flask import Flask, request
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    Application,
-    CallbackQueryHandler,
-    CommandHandler,
-    MessageHandler,
-    ContextTypes,
-    filters
-)
-import config
+import telebot
+import os
 
-# --------------------- CONFIG ---------------------
-TOKEN = config.TOKEN
-WEBHOOK_URL = config.WEBHOOK_URL
+TOKEN = os.getenv("BOT_TOKEN")  # Asegúrate de ponerlo en las variables de Render
+bot = telebot.TeleBot(TOKEN)
 
 app = Flask(__name__)
-logging.basicConfig(level=logging.INFO)
 
-# --------------------- BOT ---------------------
-application = Application.builder().token(TOKEN).build()
+# --- HANDLERS DEL BOT ---
 
-
-# --------------------- HOME ---------------------
-@app.get("/")
-def home():
-    return "Bot funcionando correctamente (Render despierto)."
-
-
-# --------------------- HANDLERS ---------------------
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [InlineKeyboardButton("📘 Habilidades Digitales", callback_data="curso1")],
-        [InlineKeyboardButton("🚀 Emprendimiento", callback_data="curso2")],
-        [InlineKeyboardButton("📣 Marketing Digital", callback_data="curso3")],
-        [InlineKeyboardButton("📝 Mi progreso", callback_data="progreso")]
-    ]
-
-    await update.message.reply_text(
-        "👋 *¡Bienvenido al programa de formación de la Comuna 6!* \n\n"
-        "Selecciona un curso:",
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    bot.reply_to(
+        message, 
+        "¡Hola! 👋\nElige un curso:\n1️⃣ Desarrollo Web\n2️⃣ Marketing Digital\n3️⃣ Excel Básico"
     )
 
+@bot.message_handler(func=lambda msg: True)
+def handle_message(message):
 
-async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
+    text = message.text.strip()
 
-    user_id = query.from_user.id
-    user_name = query.from_user.first_name
+    if text == "1":
+        bot.reply_to(message, "Aquí está tu curso de Desarrollo Web:\nhttps://t.me/+IIfD2Ud8W098YTc0")
+    elif text == "2":
+        bot.reply_to(message, "Curso de Marketing Digital:\nhttps://t.me/+abc123")
+    elif text == "3":
+        bot.reply_to(message, "Curso de Excel Básico:\nhttps://t.me/+xyz456")
+    else:
+        bot.reply_to(message, "Por favor envía 1, 2 o 3 😊")
 
-    context.bot_data.setdefault("usuarios", {})[user_id] = {"nombre": user_name}
-
-    if query.data == "curso1":
-        await query.edit_message_text(
-            "📘 *Curso 1 – Habilidades Digitales*\n\nContenido:\n👉 https://t.me/+TU_CANAL_1",
-            parse_mode="Markdown"
-        )
-
-    elif query.data == "curso2":
-        await query.edit_message_text(
-            "🚀 *Curso 2 – Emprendimiento*\n\nContenido:\n👉 https://t.me/+TU_CANAL_2",
-            parse_mode="Markdown"
-        )
-
-    elif query.data == "curso3":
-        await query.edit_message_text(
-            "📣 *Curso 3 – Marketing Digital*\n\nContenido:\n👉 https://t.me/+TU_CANAL_3",
-            parse_mode="Markdown"
-        )
-
-    elif query.data == "progreso":
-        progreso = context.bot_data.get("progreso", {})
-        cursos_usuario = progreso.get(user_id, [])
-        texto = (
-            "Aún no has completado ningún curso."
-            if not cursos_usuario
-            else "🏅 *Cursos completados:*\n" + "\n".join([f"✔ {c}" for c in cursos_usuario])
-        )
-        await query.edit_message_text(texto, parse_mode="Markdown")
-
-
-async def registrar_progreso(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    mensaje = update.message.text.lower()
-    user_id = update.message.from_user.id
-
-    if mensaje.startswith("terminé curso"):
-        curso = mensaje.replace("terminé curso", "").strip()
-        progreso = context.bot_data.setdefault("progreso", {})
-        progreso.setdefault(user_id, []).append(curso)
-
-        await update.message.reply_text(
-            f"🎉 ¡Excelente! Registré que finalizaste el curso *{curso}*!",
-            parse_mode="Markdown"
-        )
-
-
-# ------------------ WEBHOOK ---------------------
-@app.post("/webhook")
+# --- WEBHOOK ---
+@app.route("/webhook", methods=["POST"])
 def webhook():
-    update = Update.de_json(request.get_json(force=True), application.bot)
+    json_str = request.get_data().decode("utf-8")
+    update = telebot.types.Update.de_json(json_str)
+    bot.process_new_updates([update])
+    return "OK", 200
 
-    # INVOCAMOS LA FUNCIÓN ASYNC CORRECTAMENTE
-    asyncio.create_task(application.process_update(update))
+@app.route("/")
+def home():
+    return "Bot funcionando correctamente", 200
 
-    return "ok"
-
-
-@app.get("/setwebhook")
-def set_webhook():
-    asyncio.run(application.bot.set_webhook(url=WEBHOOK_URL))
-    return f"Webhook configurado en {WEBHOOK_URL}"
-
-
-# ------------------ START ---------------------
 if __name__ == "__main__":
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CallbackQueryHandler(buttons))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, registrar_progreso))
-
-    print("Bot en ejecución con webhook…")
-    app.run(host="0.0.0.0", port=10000)
+    bot.remove_webhook()
+    bot.set_webhook(url=os.getenv("WEBHOOK_URL"))
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
