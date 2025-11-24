@@ -1,48 +1,76 @@
-from flask import Flask, request
-import telebot
 import os
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    CallbackQueryHandler,
+    MessageHandler,
+    ContextTypes,
+    filters
+)
 
-TOKEN = os.getenv("BOT_TOKEN")  # Asegúrate de ponerlo en las variables de Render
-bot = telebot.TeleBot(TOKEN)
+TOKEN = os.getenv("TOKEN")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # https://tu-app.onrender.com/webhook
 
-app = Flask(__name__)
+PORT = int(os.getenv("PORT", 10000))
 
-# --- HANDLERS DEL BOT ---
 
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    bot.reply_to(
-        message, 
-        "¡Hola! 👋\nElige un curso:\n1️⃣ Desarrollo Web\n2️⃣ Marketing Digital\n3️⃣ Excel Básico"
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [InlineKeyboardButton("📘 Habilidades Digitales", callback_data="curso1")],
+        [InlineKeyboardButton("🚀 Emprendimiento", callback_data="curso2")],
+        [InlineKeyboardButton("📣 Marketing Digital", callback_data="curso3")],
+        [InlineKeyboardButton("📝 Mi progreso", callback_data="progreso")],
+    ]
+
+    await update.message.reply_text(
+        "👋 *Bienvenido!* Selecciona un curso:",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-@bot.message_handler(func=lambda msg: True)
-def handle_message(message):
 
-    text = message.text.strip()
+async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
 
-    if text == "1":
-        bot.reply_to(message, "Aquí está tu curso de Desarrollo Web:\nhttps://t.me/+IIfD2Ud8W098YTc0")
-    elif text == "2":
-        bot.reply_to(message, "Curso de Marketing Digital:\nhttps://t.me/+abc123")
-    elif text == "3":
-        bot.reply_to(message, "Curso de Excel Básico:\nhttps://t.me/+xyz456")
-    else:
-        bot.reply_to(message, "Por favor envía 1, 2 o 3 😊")
+    if query.data == "curso1":
+        await query.edit_message_text(
+            "📘 Curso 1\n👉 https://t.me/+CANAL1"
+        )
 
-# --- WEBHOOK ---
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    json_str = request.get_data().decode("utf-8")
-    update = telebot.types.Update.de_json(json_str)
-    bot.process_new_updates([update])
-    return "OK", 200
+    elif query.data == "curso2":
+        await query.edit_message_text(
+            "🚀 Curso 2\n👉 https://t.me/+CANAL2"
+        )
 
-@app.route("/")
-def home():
-    return "Bot funcionando correctamente", 200
+    elif query.data == "curso3":
+        await query.edit_message_text(
+            "📣 Curso 3\n👉 https://t.me/+CANAL3"
+        )
+
+    elif query.data == "progreso":
+        await query.edit_message_text("🏅 Sin progreso registrado aún.")
+
+
+async def registrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("✔ OK, he recibido tu mensaje.")
+
+
+def main():
+    app = Application.builder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(buttons))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, registrar))
+
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        url_path="webhook",
+        webhook_url=f"{WEBHOOK_URL}/webhook"
+    )
+
 
 if __name__ == "__main__":
-    bot.remove_webhook()
-    bot.set_webhook(url=os.getenv("WEBHOOK_URL"))
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    main()
