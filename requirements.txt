@@ -1,3 +1,2 @@
-Flask
-pyTelegramBotAPI
-gunicorn
+python-telegram-bot==21.5
+
