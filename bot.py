@@ -22,6 +22,12 @@ logging.basicConfig(level=logging.INFO)
 application = Application.builder().token(TOKEN).build()
 
 
+# --------------------- RUTA PRINCIPAL ---------------------
+@app.get("/")
+def home():
+    return "Bot funcionando correctamente."
+
+
 # --------------------- MENSAJE /START ---------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -48,33 +54,26 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     user_name = query.from_user.first_name
 
-    # Registrar que el usuario interactuó
     context.bot_data.setdefault("usuarios", {})[user_id] = {"nombre": user_name}
 
     if query.data == "curso1":
         await query.edit_message_text(
             "📘 *Curso 1 – Habilidades Digitales*\n\n"
-            "Accede al contenido aquí:\n"
-            "👉 https://t.me/+TU_CANAL_1\n\n"
-            "Cuando termines, escribe: *terminé curso 1*",
+            "Contenido:\n👉 https://t.me/+TU_CANAL_1",
             parse_mode="Markdown"
         )
 
     elif query.data == "curso2":
         await query.edit_message_text(
             "🚀 *Curso 2 – Emprendimiento*\n\n"
-            "Accede al contenido aquí:\n"
-            "👉 https://t.me/+TU_CANAL_2\n\n"
-            "Cuando termines, escribe: *terminé curso 2*",
+            "Contenido:\n👉 https://t.me/+TU_CANAL_2",
             parse_mode="Markdown"
         )
 
     elif query.data == "curso3":
         await query.edit_message_text(
             "📣 *Curso 3 – Marketing Digital*\n\n"
-            "Accede al contenido aquí:\n"
-            "👉 https://t.me/+TU_CANAL_3\n\n"
-            "Cuando termines, escribe: *terminé curso 3*",
+            "Contenido:\n👉 https://t.me/+TU_CANAL_3",
             parse_mode="Markdown"
         )
 
@@ -98,26 +97,25 @@ async def registrar_progreso(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if mensaje.startswith("terminé curso"):
         curso = mensaje.replace("terminé curso", "").strip()
 
-        # Guardar progreso
         progreso = context.bot_data.setdefault("progreso", {})
         progreso.setdefault(user_id, []).append(curso)
 
         await update.message.reply_text(
-            f"🎉 ¡Excelente! Registré que finalizaste el curso *{curso}*.",
+            f"🎉 ¡Excelente! Registré que finalizaste el curso *{curso}*!",
             parse_mode="Markdown"
         )
 
 
 # --------------------- ENDPOINT DEL WEBHOOK ---------------------
-@app.route("/webhook", methods=["POST"])
+@app.post("/webhook")
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
-    application.update_queue.put(update)
+    application.process_update(update)     # ← CORREGIDO
     return "ok"
 
 
 # --------------------- CONFIGURAR WEBHOOK ---------------------
-@app.route("/setwebhook", methods=["GET"])
+@app.get("/setwebhook")
 def set_webhook():
     application.bot.set_webhook(url=WEBHOOK_URL)
     return f"Webhook configurado en {WEBHOOK_URL}"
