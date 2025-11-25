@@ -1,76 +1,59 @@
-import os
+from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    CallbackQueryHandler,
-    MessageHandler,
-    ContextTypes,
-    filters
-)
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler
+import os
 
-TOKEN = os.getenv("TOKEN")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # https://tu-app.onrender.com/webhook
+TOKEN = os.getenv("BOT_TOKEN")
 
-PORT = int(os.getenv("PORT", 10000))
+app = Flask(__name__)
+
+# --- Cursos disponibles ---
+CURSOS = {
+    "curso1": "https://link-del-curso-1.com",
+    "curso2": "https://link-del-curso-2.com",
+    "curso3": "https://link-del-curso-3.com"
+}
+
+# --- Configuración del bot ---
+bot_app = Application.builder().token(TOKEN).build()
 
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(update: Update, context):
     keyboard = [
-        [InlineKeyboardButton("📘 Habilidades Digitales", callback_data="curso1")],
-        [InlineKeyboardButton("🚀 Emprendimiento", callback_data="curso2")],
-        [InlineKeyboardButton("📣 Marketing Digital", callback_data="curso3")],
-        [InlineKeyboardButton("📝 Mi progreso", callback_data="progreso")],
+        [InlineKeyboardButton("Curso 1", callback_data="curso1")],
+        [InlineKeyboardButton("Curso 2", callback_data="curso2")],
+        [InlineKeyboardButton("Curso 3", callback_data="curso3")]
     ]
-
-    await update.message.reply_text(
-        "👋 *Bienvenido!* Selecciona un curso:",
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("👋 ¡Bienvenido! Selecciona un curso:", reply_markup=reply_markup)
 
 
-async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def button_click(update: Update, context):
     query = update.callback_query
     await query.answer()
 
-    if query.data == "curso1":
-        await query.edit_message_text(
-            "📘 Curso 1\n👉 https://t.me/+CANAL1"
-        )
+    curso_id = query.data
+    link = CURSOS.get(curso_id, "No existe el curso.")
 
-    elif query.data == "curso2":
-        await query.edit_message_text(
-            "🚀 Curso 2\n👉 https://t.me/+CANAL2"
-        )
-
-    elif query.data == "curso3":
-        await query.edit_message_text(
-            "📣 Curso 3\n👉 https://t.me/+CANAL3"
-        )
-
-    elif query.data == "progreso":
-        await query.edit_message_text("🏅 Sin progreso registrado aún.")
+    await query.edit_message_text(f"Aquí está el enlace del curso:\n\n{link}")
 
 
-async def registrar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("✔ OK, he recibido tu mensaje.")
+bot_app.add_handler(CommandHandler("start", start))
+bot_app.add_handler(CallbackQueryHandler(button_click))
 
 
-def main():
-    app = Application.builder().token(TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(buttons))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, registrar))
-
-    app.run_webhook(
-        listen="0.0.0.0",
-        port=PORT,
-        url_path="webhook",
-        webhook_url=f"{WEBHOOK_URL}/webhook"
-    )
+# --- Webhook ---
+@app.post("/")
+def webhook():
+    update = Update.de_json(request.get_json(force=True), bot_app.bot)
+    bot_app.update_queue.put_nowait(update)
+    return "OK", 200
 
 
+# Para correr en local si quieres
 if __name__ == "__main__":
-    main()
+    bot_app.run_webhook(
+        listen="0.0.0.0",
+        port=5000,
+        webhook_url="https://TU-APP.onrender.com"
+    )
