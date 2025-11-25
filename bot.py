@@ -1,59 +1,82 @@
+import os
+import asyncio
 from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CallbackQueryHandler, CommandHandler
-import os
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler
 
+# ------------------------------------
+#  CONFIG
+# ------------------------------------
 TOKEN = os.getenv("BOT_TOKEN")
+if not TOKEN:
+    raise Exception("No se encontró BOT_TOKEN en variables de entorno.")
 
-app = Flask(__name__)
-
-# --- Cursos disponibles ---
 CURSOS = {
     "curso1": "https://link-del-curso-1.com",
     "curso2": "https://link-del-curso-2.com",
     "curso3": "https://link-del-curso-3.com"
 }
 
-# --- Configuración del bot ---
-bot_app = Application.builder().token(TOKEN).build()
+app = Flask(__name__)
+tg_app = None
 
 
-async def start(update: Update, context):
+# ------------------------------------
+# HANDLERS DEL BOT
+# ------------------------------------
+async def start(update, context):
     keyboard = [
         [InlineKeyboardButton("Curso 1", callback_data="curso1")],
         [InlineKeyboardButton("Curso 2", callback_data="curso2")],
         [InlineKeyboardButton("Curso 3", callback_data="curso3")]
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("👋 ¡Bienvenido! Selecciona un curso:", reply_markup=reply_markup)
+    await update.message.reply_text(
+        "👋 ¡Bienvenido! Selecciona un curso:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 
-async def button_click(update: Update, context):
+async def button(update, context):
     query = update.callback_query
     await query.answer()
 
-    curso_id = query.data
-    link = CURSOS.get(curso_id, "No existe el curso.")
+    curso = query.data
+    link = CURSOS.get(curso, "Curso no encontrado.")
 
     await query.edit_message_text(f"Aquí está el enlace del curso:\n\n{link}")
 
 
-bot_app.add_handler(CommandHandler("start", start))
-bot_app.add_handler(CallbackQueryHandler(button_click))
-
-
-# --- Webhook ---
+# ------------------------------------
+# WEBHOOK RECEIVER
+# ------------------------------------
 @app.post("/")
 def webhook():
-    update = Update.de_json(request.get_json(force=True), bot_app.bot)
-    bot_app.update_queue.put_nowait(update)
+    data = request.get_json(force=True)
+    update = Update.de_json(data, tg_app.bot)
+    tg_app.update_queue.put_nowait(update)
     return "OK", 200
 
 
-# Para correr en local si quieres
+# ------------------------------------
+# INICIALIZACIÓN DEL BOT
+# ------------------------------------
+async def setup_bot():
+    global tg_app
+    tg_app = Application.builder().token(TOKEN).build()
+
+    tg_app.add_handler(CommandHandler("start", start))
+    tg_app.add_handler(CallbackQueryHandler(button))
+
+    await tg_app.initialize()
+    await tg_app.start()
+
+
+# ------------------------------------
+# ARRANQUE DE FLASK + BOT
+# ------------------------------------
 if __name__ == "__main__":
-    bot_app.run_webhook(
-        listen="0.0.0.0",
-        port=5000,
-        webhook_url="https://TU-APP.onrender.com"
-    )
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(setup_bot())
+
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
